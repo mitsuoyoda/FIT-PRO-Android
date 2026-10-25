@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.FitTrainer" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/green_700</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
