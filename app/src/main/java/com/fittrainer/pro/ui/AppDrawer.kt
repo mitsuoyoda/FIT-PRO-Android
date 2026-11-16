@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CalendarViewMonth
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -50,6 +51,7 @@ val drawerItems = listOf(
     DrawerItem("agenda", "Agenda", Icons.Outlined.CalendarViewMonth),
     DrawerItem("clientes", "Alunos", Icons.Outlined.People),
     DrawerItem("treinos", "Treinos salvos", Icons.Outlined.FitnessCenter),
+    DrawerItem("assessoria", "Assessoria", Icons.Outlined.DateRange),
     DrawerItem("exercicios", "Exercícios", Icons.Outlined.Bolt),
     DrawerItem("financeiro", "Financeiro", Icons.Outlined.AttachMoney),
     DrawerItem("relatorios", "Relatórios", Icons.Outlined.BarChart),
@@ -86,15 +88,15 @@ fun AppDrawer(
                 Icon(Icons.Outlined.NorthEast, contentDescription = null, tint = FitColors.Paper, modifier = Modifier.size(20.dp))
             }
             Column {
-                Text("FitTrainer Pro", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = FitColors.Ink)
-                Text("espaço do treinador", fontSize = 11.sp, color = FitColors.Muted)
+                Text("FitTrainer Pro", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FitColors.Ink)
+                Text("espaço do treinador", fontSize = 12.sp, color = FitColors.Muted)
             }
         }
         Spacer(Modifier.height(22.dp))
         Text(
             "MENU",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.3.sp,
             color = FitColors.NavLabel,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -124,7 +126,7 @@ fun AppDrawer(
                 Text(
                     item.label,
                     color = if (selected) FitColors.GreenDark else FitColors.NavIdle,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     fontSize = 15.sp
                 )
             }

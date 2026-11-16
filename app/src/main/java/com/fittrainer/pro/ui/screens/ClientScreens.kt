@@ -35,10 +35,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.fittrainer.pro.data.local.ClienteEntity
 import com.fittrainer.pro.ui.components.EmptyState
 import com.fittrainer.pro.ui.components.InfoCard
+import com.fittrainer.pro.ui.components.InitialsAvatar
+import com.fittrainer.pro.ui.components.PageHeader
 import com.fittrainer.pro.ui.components.SimpleDropdown
+import com.fittrainer.pro.ui.components.StatusChip
+import com.fittrainer.pro.ui.theme.FitColors
 import com.fittrainer.pro.util.Time
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,45 +53,65 @@ fun ClientesScreen(
     onAdd: () -> Unit,
     onOpen: (ClienteEntity) -> Unit,
     onVisualize: (ClienteEntity) -> Unit,
+    onExportarApp: (ClienteEntity) -> Unit = {},
+    onIntegrateApp: (ClienteEntity) -> Unit = {},
     onDelete: (String) -> Unit
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = FitColors.Canvas,
         floatingActionButton = {
-            FloatingActionButton(onClick = onAdd, containerColor = MaterialTheme.colorScheme.primary) {
+            FloatingActionButton(onClick = onAdd, containerColor = FitColors.Green) {
                 Icon(Icons.Outlined.Add, contentDescription = "Novo aluno")
             }
         }
     ) { padding ->
-        if (clientes.isEmpty()) {
-            EmptyState("Cadastre o primeiro aluno. Tudo fica salvo neste aparelho.", Modifier.padding(padding))
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                PageHeader(
+                    eyebrow = "Alunos",
+                    title = "Alunos do espaço",
+                    subtitle = "Consulte os alunos cadastrados e abra a ficha de cada um."
+                )
+            }
+            if (clientes.isEmpty()) {
+                item { EmptyState("Cadastre o primeiro aluno. Tudo fica salvo neste aparelho.") }
+            } else {
                 items(clientes, key = { it.id }) { cliente ->
                     InfoCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            InitialsAvatar(cliente.nome)
                             Column(Modifier.weight(1f)) {
-                                Text(cliente.nome, fontWeight = FontWeight.SemiBold)
-                                Text(cliente.email.ifBlank { cliente.telefone.ifBlank { "Sem contato" } })
+                                Text(cliente.nome, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = FitColors.Ink)
                                 Text(
-                                    "${cliente.status} · ${cliente.objetivo.ifBlank { "Sem objetivo" }}",
-                                    color = MaterialTheme.colorScheme.outline
+                                    cliente.email.ifBlank { cliente.telefone.ifBlank { "Sem contato" } },
+                                    fontSize = 12.sp,
+                                    color = FitColors.Muted
+                                )
+                                Text(
+                                    cliente.objetivo.ifBlank { "Sem objetivo" },
+                                    fontSize = 12.sp,
+                                    color = FitColors.Muted
                                 )
                             }
+                            StatusChip(if (cliente.status == "ativo") "Ativo" else "Inativo")
                             IconButton(onClick = { onDelete(cliente.id) }) {
                                 Icon(Icons.Outlined.Delete, contentDescription = "Excluir")
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { onVisualize(cliente) }) { Text("Visualizar") }
-                            OutlinedButton(onClick = { onOpen(cliente) }) { Text("Editar") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+                            OutlinedButton(onClick = { onVisualize(cliente) }, modifier = Modifier.weight(1f)) { Text("Visualizar") }
+                            OutlinedButton(onClick = { onOpen(cliente) }, modifier = Modifier.weight(1f)) { Text("Editar") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            OutlinedButton(onClick = { onExportarApp(cliente) }, modifier = Modifier.weight(1f)) { Text("Perfil JSON") }
+                            Button(onClick = { onIntegrateApp(cliente) }, modifier = Modifier.weight(1f)) { Text("Vincular app") }
                         }
                     }
                 }

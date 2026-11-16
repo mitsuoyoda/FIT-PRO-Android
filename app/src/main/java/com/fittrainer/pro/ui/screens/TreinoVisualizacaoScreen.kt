@@ -27,11 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.fittrainer.pro.data.local.ClienteEntity
 import com.fittrainer.pro.data.local.ExecucaoExercicio
 import com.fittrainer.pro.data.local.HistoricoTreinoEntity
 import com.fittrainer.pro.data.local.JsonStore
 import com.fittrainer.pro.data.local.TreinoEntity
 import com.fittrainer.pro.ui.components.EmptyState
+import com.fittrainer.pro.ui.components.EnviarTreinoWhatsAppButton
 import com.fittrainer.pro.ui.components.InfoCard
 import com.fittrainer.pro.util.Time
 
@@ -39,14 +41,16 @@ import com.fittrainer.pro.util.Time
 @Composable
 fun TreinoVisualizacaoScreen(
     treino: TreinoEntity?,
+    clientes: List<ClienteEntity> = emptyList(),
     onBack: () -> Unit,
-    onSaveRealizado: (HistoricoTreinoEntity) -> Unit
+    onSaveRealizado: (HistoricoTreinoEntity) -> Unit,
+    onRegistrarEnvio: (TreinoEntity) -> Unit = {}
 ) {
-    val exercicios = remember(treino?.id, treino?.exerciciosJson) {
-        treino?.let { JsonStore.decodeExercicios(it.exerciciosJson) } ?: emptyList()
+    val sets = remember(treino?.id, treino?.exerciciosJson) {
+        treino?.let { JsonStore.decodeSets(it.exerciciosJson) } ?: emptyList()
     }
     val feitos = remember(treino?.id) { mutableStateMapOf<String, Boolean>() }
-    val pesos = remember(treino?.id) { mutableStateMapOf<Int, String>() }
+    val pesos = remember(treino?.id) { mutableStateMapOf<String, String>() }
 
     Scaffold(
         topBar = {
@@ -71,7 +75,7 @@ fun TreinoVisualizacaoScreen(
             EmptyState("Treino não encontrado.", Modifier.padding(padding))
             return@Scaffold
         }
-        if (exercicios.isEmpty()) {
+        if (sets.isEmpty() || sets.all { it.exercicios.isEmpty() }) {
             EmptyState("Este treino ainda não tem exercícios.", Modifier.padding(padding))
             return@Scaffold
         }
@@ -83,61 +87,79 @@ fun TreinoVisualizacaoScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Marque cada série e registre o peso utilizado.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EnviarTreinoWhatsAppButton(
+                treino = treino,
+                clientes = clientes,
+                modifier = Modifier.fillMaxWidth(),
+                preenchido = true,
+                onRegistrarEnvio = onRegistrarEnvio
+            )
+            Text("Marque cada série e registre o peso utilizado. O descanso fica no final de cada SET.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (treino.clienteId.isBlank()) {
                 Text("Vincule este treino a um aluno para salvar como realizado.", color = MaterialTheme.colorScheme.error)
             }
-            exercicios.forEachIndexed { exIndex, exercicio ->
-                val series = exercicio.series.coerceAtLeast(1)
+            sets.forEachIndexed { setIndex, set ->
                 InfoCard {
-                    Text(exercicio.nome.ifBlank { "Exercício ${exIndex + 1}" }, fontWeight = FontWeight.SemiBold)
-                    val meta = listOfNotNull(
-                        exercicio.grupoMuscular.takeIf { it.isNotBlank() },
-                        "$series série${if (series > 1) "s" else ""}",
-                        if (exercicio.tipoExecucao == "tempo") {
-                            exercicio.tempoExecucao?.let { Time.formatMmSs(it) }
-                        } else {
-                            "${exercicio.repeticoes} reps"
-                        },
-                        if (exercicio.tipoExecucao == "tempo" && exercicio.descansoSegundos > 0) {
-                            "descanso ${Time.formatMmSs(exercicio.descansoSegundos)}"
-                        } else {
-                            null
+                    Text(set.titulo(setIndex), fontWeight = FontWeight.SemiBold)
+                    set.exercicios.forEachIndexed { exIndex, exercicio ->
+                        val chaveEx = "$setIndex-$exIndex"
+                        val series = exercicio.series.coerceAtLeast(1)
+                        Text(exercicio.nome.ifBlank { "Exercício ${exIndex + 1}" }, fontWeight = FontWeight.Medium)
+                        val meta = listOfNotNull(
+                            exercicio.grupoMuscular.takeIf { it.isNotBlank() },
+                            "$series série${if (series > 1) "s" else ""}",
+                            if (exercicio.tipoExecucao == "tempo") {
+                                exercicio.tempoExecucao?.let { Time.formatMmSs(it) }
+                            } else {
+                                "${exercicio.repeticoes} reps"
+                            }
+                        ).joinToString(" · ")
+                        Text(meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = pesos[chaveEx].orEmpty(),
+                            onValueChange = { pesos[chaveEx] = it },
+                            label = { Text("Peso (kg)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        repeat(series) { serieIndex ->
+                            val key = "$chaveEx-$serieIndex"
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = feitos[key] == true,
+                                    onCheckedChange = { feitos[key] = it }
+                                )
+                                Text("Série ${serieIndex + 1}")
+                            }
                         }
-                    ).joinToString(" · ")
-                    Text(meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(
-                        value = pesos[exIndex].orEmpty(),
-                        onValueChange = { pesos[exIndex] = it },
-                        label = { Text("Peso (kg)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    repeat(series) { serieIndex ->
-                        val key = "$exIndex-$serieIndex"
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = feitos[key] == true,
-                                onCheckedChange = { feitos[key] = it }
-                            )
-                            Text("Série ${serieIndex + 1}")
-                        }
+                    }
+                    if (set.descansoSegundos > 0) {
+                        Text(
+                            "Descanso após o SET: ${Time.formatMmSs(set.descansoSegundos)}",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
             Button(
                 onClick = {
-                    val snapshot = exercicios.mapIndexed { exIndex, exercicio ->
-                        val series = exercicio.series.coerceAtLeast(1)
-                        ExecucaoExercicio(
-                            nome = exercicio.nome,
-                            grupoMuscular = exercicio.grupoMuscular,
-                            series = series,
-                            repeticoes = exercicio.repeticoes,
-                            tipoExecucao = exercicio.tipoExecucao,
-                            tempoExecucao = exercicio.tempoExecucao,
-                            pesoKg = pesos[exIndex].orEmpty().trim(),
-                            seriesFeitas = (0 until series).map { feitos["$exIndex-$it"] == true }
-                        )
+                    val snapshot = sets.flatMapIndexed { setIndex, set ->
+                        set.exercicios.mapIndexed { exIndex, exercicio ->
+                            val chaveEx = "$setIndex-$exIndex"
+                            val series = exercicio.series.coerceAtLeast(1)
+                            ExecucaoExercicio(
+                                nome = exercicio.nome,
+                                grupoMuscular = exercicio.grupoMuscular,
+                                series = series,
+                                repeticoes = exercicio.repeticoes,
+                                tipoExecucao = exercicio.tipoExecucao,
+                                tempoExecucao = exercicio.tempoExecucao,
+                                pesoKg = pesos[chaveEx].orEmpty().trim(),
+                                seriesFeitas = (0 until series).map { feitos["$chaveEx-$it"] == true },
+                                setId = set.id,
+                                setNome = set.titulo(setIndex)
+                            )
+                        }
                     }
                     val now = Time.nowIso()
                     onSaveRealizado(

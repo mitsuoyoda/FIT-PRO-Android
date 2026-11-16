@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -26,8 +28,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import com.fittrainer.pro.data.assessoria.WhatsAppShare
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,64 +49,134 @@ import com.fittrainer.pro.data.catalog.ExerciseCatalogItem
 import com.fittrainer.pro.data.local.AulaAluno
 import com.fittrainer.pro.data.local.AulaEntity
 import com.fittrainer.pro.data.local.ClienteEntity
+import com.fittrainer.pro.data.local.ExercicioBibliotecaEntity
 import com.fittrainer.pro.data.local.JsonStore
 import com.fittrainer.pro.data.local.TreinoEntity
 import com.fittrainer.pro.data.local.WorkoutExercise
+import com.fittrainer.pro.data.local.WorkoutSet
+import androidx.compose.ui.unit.sp
+import com.fittrainer.pro.ui.components.CheckInRow
 import com.fittrainer.pro.ui.components.EmptyState
+import com.fittrainer.pro.ui.components.EnviarTreinoWhatsAppButton
 import com.fittrainer.pro.ui.components.ExerciseInfoDialog
 import com.fittrainer.pro.ui.components.ExerciseNameField
 import com.fittrainer.pro.ui.components.InfoCard
+import com.fittrainer.pro.ui.components.PageHeader
 import com.fittrainer.pro.ui.components.SimpleDropdown
+import com.fittrainer.pro.ui.components.StatusChip
+import com.fittrainer.pro.ui.theme.FitColors
 import com.fittrainer.pro.util.Time
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TreinosScreen(
     treinos: List<TreinoEntity>,
+    clientes: List<ClienteEntity> = emptyList(),
     onAdd: () -> Unit,
     onOpen: (TreinoEntity) -> Unit,
     onVisualize: (TreinoEntity) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onRegistrarEnvio: (TreinoEntity) -> Unit = {},
+    onExportarApp: (TreinoEntity) -> Unit = {},
+    onEnviarApp: (TreinoEntity) -> Unit = {}
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = FitColors.Canvas,
         floatingActionButton = {
-            FloatingActionButton(onClick = onAdd, containerColor = MaterialTheme.colorScheme.primary) {
+            FloatingActionButton(onClick = onAdd, containerColor = FitColors.Green) {
                 Icon(Icons.Outlined.Add, contentDescription = "Novo treino")
             }
         }
     ) { padding ->
-        if (treinos.isEmpty()) {
-            EmptyState("Crie um treino para um aluno. Ele fica só neste aparelho.", Modifier.padding(padding))
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            item {
+                PageHeader(
+                    eyebrow = "Biblioteca",
+                    title = "Treinos salvos",
+                    subtitle = "Abra o plano criado para cada aluno e visualize os exercícios."
+                )
+            }
+            if (treinos.isEmpty()) {
+                item { EmptyState("Crie um treino para um aluno. Ele fica só neste aparelho.") }
+            } else {
                 items(treinos, key = { it.id }) { treino ->
-                    val exercicios = JsonStore.decodeExercicios(treino.exerciciosJson)
+                    val sets = JsonStore.decodeSets(treino.exerciciosJson)
+                    val exercicios = sets.flatMap { it.exercicios }
+                    val aluno = WhatsAppShare.clienteDoCadastro(clientes, treino.clienteId, treino.clienteNome)
+                    val telefone = aluno?.telefone?.takeIf { it.isNotBlank() }
                     InfoCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.Top) {
                             Column(Modifier.weight(1f)) {
-                                Text(treino.titulo, fontWeight = FontWeight.SemiBold)
-                                Text(treino.clienteNome.ifBlank { "Sem aluno" })
+                                Text(treino.titulo, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = FitColors.Ink)
                                 Text(
-                                    "${exercicios.size} exercícios · ${treino.tipo}",
-                                    color = MaterialTheme.colorScheme.outline
+                                    when {
+                                        aluno != null && telefone != null -> "${aluno.nome} · $telefone"
+                                        aluno != null -> "${aluno.nome} · sem telefone no cadastro"
+                                        treino.clienteNome.isBlank() -> "Sem aluno"
+                                        else -> treino.clienteNome
+                                    },
+                                    fontSize = 12.sp,
+                                    color = FitColors.Muted
                                 )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                StatusChip(treino.tipo.replaceFirstChar { it.uppercase() })
+                                if (treino.dataEnvio.isNotBlank()) {
+                                    StatusChip("Enviado")
+                                }
                             }
                             IconButton(onClick = { onDelete(treino.id) }) {
                                 Icon(Icons.Outlined.Delete, contentDescription = "Excluir")
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { onVisualize(treino) }) { Text("Visualizar") }
-                            OutlinedButton(onClick = { onOpen(treino) }) { Text("Editar") }
+                        if (treino.descricao.isNotBlank()) {
+                            Text(
+                                treino.descricao,
+                                fontSize = 12.sp,
+                                color = FitColors.Muted,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
+                            )
                         }
+                        Text(
+                            buildString {
+                                append("${sets.size} SET${if (sets.size == 1) "" else "s"}")
+                                append(" · ${exercicios.size} exercício${if (exercicios.size == 1) "" else "s"}")
+                                append(" · ${treino.duracaoEstimada} min")
+                                if (treino.dataEnvio.isNotBlank()) {
+                                    append(" · enviado ${Time.formatDateTime(treino.dataEnvio)}")
+                                }
+                            },
+                            fontSize = 12.sp,
+                            color = FitColors.NavIdle
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 16.dp)
+                        ) {
+                            OutlinedButton(onClick = { onVisualize(treino) }, modifier = Modifier.weight(1f)) { Text("Visualizar") }
+                            OutlinedButton(onClick = { onOpen(treino) }, modifier = Modifier.weight(1f)) { Text("Editar") }
+                        }
+                        EnviarTreinoWhatsAppButton(
+                            treino = treino,
+                            clientes = clientes,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            onRegistrarEnvio = onRegistrarEnvio
+                        )
+                        OutlinedButton(
+                            onClick = { onExportarApp(treino) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) { Text("Exportar JSON") }
+                        OutlinedButton(
+                            onClick = { onEnviarApp(treino) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) { Text("Enviar ao app do aluno") }
                     }
                 }
             }
@@ -114,9 +189,11 @@ fun TreinosScreen(
 fun TreinoFormScreen(
     existing: TreinoEntity?,
     clientes: List<ClienteEntity>,
+    biblioteca: List<ExercicioBibliotecaEntity> = emptyList(),
     onBack: () -> Unit,
     onVisualize: ((String) -> Unit)? = null,
-    onSave: (TreinoEntity) -> Unit
+    onSave: (TreinoEntity) -> Unit,
+    onRegistrarEnvio: (TreinoEntity) -> Unit = {}
 ) {
     val ativos = clientes.filter { it.status == "ativo" }
     var titulo by rememberSaveable { mutableStateOf(existing?.titulo.orEmpty()) }
@@ -124,16 +201,42 @@ fun TreinoFormScreen(
     var clienteId by rememberSaveable { mutableStateOf(existing?.clienteId.orEmpty()) }
     var tipo by rememberSaveable { mutableStateOf(existing?.tipo ?: "forca") }
     var duracao by rememberSaveable { mutableStateOf((existing?.duracaoEstimada ?: 60).toString()) }
-    var exercicios by remember { mutableStateOf(existing?.let { JsonStore.decodeExercicios(it.exerciciosJson) } ?: emptyList()) }
-    val temposDigitados = remember { mutableStateMapOf<Int, String>() }
+    var sets by remember(existing?.id) {
+        mutableStateOf(
+            JsonStore.decodeSets(existing?.exerciciosJson.orEmpty()).ifEmpty {
+                listOf(WorkoutSet(id = Time.newId(), exercicios = listOf(WorkoutExercise()), descansoSegundos = 60))
+            }
+        )
+    }
+    val temposDigitados = remember { mutableStateMapOf<String, String>() }
     val descansosDigitados = remember { mutableStateMapOf<Int, String>() }
     var detalhe by remember { mutableStateOf<ExerciseCatalogItem?>(null) }
+    var confirmarEnvio by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val alunoCadastro = WhatsAppShare.clienteDoCadastro(clientes, clienteId, existing?.clienteNome.orEmpty())
 
-    fun aplicarCatalogo(index: Int, item: ExerciseCatalogItem) {
-        val atual = exercicios[index]
-        exercicios = exercicios.toMutableList().also { list ->
-            list[index] = atual.copy(
+    fun jsonDosSets(lista: List<WorkoutSet> = sets): String = JsonStore.encodeSets(
+        lista.map { set ->
+            set.copy(
+                id = set.id.ifBlank { Time.newId() },
+                exercicios = set.exercicios.filter { it.nome.isNotBlank() }.map { it.copy(descansoSegundos = 0) }
+            )
+        }.filter { it.exercicios.isNotEmpty() }
+    )
+
+    fun atualizarSet(setIndex: Int, transform: (WorkoutSet) -> WorkoutSet) {
+        sets = sets.toMutableList().also { it[setIndex] = transform(it[setIndex]) }
+    }
+
+    fun atualizarEx(setIndex: Int, exIndex: Int, transform: (WorkoutExercise) -> WorkoutExercise) {
+        atualizarSet(setIndex) { set ->
+            set.copy(exercicios = set.exercicios.toMutableList().also { it[exIndex] = transform(it[exIndex]) })
+        }
+    }
+
+    fun aplicarCatalogo(setIndex: Int, exIndex: Int, item: ExerciseCatalogItem) {
+        atualizarEx(setIndex, exIndex) { atual ->
+            atual.copy(
                 nome = item.displayName,
                 grupoMuscular = item.grupo,
                 observacoes = item.secundarios,
@@ -146,8 +249,7 @@ fun TreinoFormScreen(
     }
 
     fun abrirDetalhe(item: WorkoutExercise) {
-        detalhe = ExerciseCatalog.items(context).firstOrNull { it.id == item.catalogId && item.catalogId.isNotBlank() }
-            ?: ExerciseCatalog.findByName(context, item.nome)
+        detalhe = ExerciseCatalog.findMerged(context, biblioteca, item.catalogId, item.nome)
             ?: ExerciseCatalogItem(
                 nomePt = item.nome,
                 grupo = item.grupoMuscular,
@@ -190,105 +292,155 @@ fun TreinoFormScreen(
             ) { tipo = it }
             OutlinedTextField(duracao, { duracao = it }, label = { Text("Duração (min)") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(descricao, { descricao = it }, label = { Text("Descrição") }, modifier = Modifier.fillMaxWidth())
-            Text("Exercícios", style = MaterialTheme.typography.titleMedium)
-            exercicios.forEachIndexed { index, item ->
+            Text("SETs", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Cada SET agrupa um ou mais exercícios em sequência. O descanso fica só no final do SET.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            sets.forEachIndexed { setIndex, set ->
                 InfoCard {
-                    ExerciseNameField(
-                        value = item.nome,
-                        onValueChange = {
-                            exercicios = exercicios.toMutableList().also { list -> list[index] = item.copy(nome = it) }
-                        },
-                        onPick = { catalogo -> aplicarCatalogo(index, catalogo) },
-                        onShowInfo = { abrirDetalhe(item) },
-                        hasInfo = item.nome.isNotBlank()
+                    Text(set.titulo(setIndex), fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(
+                        set.nome,
+                        { valor -> atualizarSet(setIndex) { it.copy(nome = valor) } },
+                        label = { Text("Nome do SET (opcional)") },
+                        placeholder = { Text(set.titulo(setIndex)) },
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    if (item.grupoMuscular.isNotBlank()) {
-                        Text(item.grupoMuscular, color = MaterialTheme.colorScheme.outline)
-                    }
-                    val porTempo = item.tipoExecucao == "tempo"
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Repetição",
-                            fontWeight = if (!porTempo) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (!porTempo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                    set.exercicios.forEachIndexed { exIndex, item ->
+                        val chaveTempo = "$setIndex-$exIndex"
+                        ExerciseNameField(
+                            value = item.nome,
+                            onValueChange = { valor -> atualizarEx(setIndex, exIndex) { it.copy(nome = valor) } },
+                            onPick = { catalogo -> aplicarCatalogo(setIndex, exIndex, catalogo) },
+                            onShowInfo = { abrirDetalhe(item) },
+                            hasInfo = item.nome.isNotBlank(),
+                            biblioteca = biblioteca
                         )
-                        Switch(
-                            checked = porTempo,
-                            onCheckedChange = { checked ->
-                                exercicios = exercicios.toMutableList().also { list ->
-                                    list[index] = item.copy(tipoExecucao = if (checked) "tempo" else "repeticao")
-                                }
-                            }
-                        )
-                        Text(
-                            "Tempo",
-                            fontWeight = if (porTempo) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (porTempo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            item.series.toString(),
-                            { exercicios = exercicios.toMutableList().also { list -> list[index] = item.copy(series = it.toIntOrNull() ?: 1) } },
-                            label = { Text("Séries") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (porTempo) {
-                            OutlinedTextField(
-                                temposDigitados[index]
-                                    ?: item.tempoExecucao?.let { Time.formatMmSs(it) }.orEmpty(),
-                                { valor ->
-                                    val sanitizado = Time.sanitizeMmSs(valor)
-                                    temposDigitados[index] = sanitizado
-                                    exercicios = exercicios.toMutableList().also { list ->
-                                        list[index] = item.copy(tempoExecucao = Time.parseMmSs(sanitizado))
-                                    }
-                                },
-                                label = { Text("Tempo (mm:ss)") },
-                                placeholder = { Text("00:45") },
-                                modifier = Modifier.weight(1f)
+                        if (item.grupoMuscular.isNotBlank()) {
+                            Text(item.grupoMuscular, color = MaterialTheme.colorScheme.outline)
+                        }
+                        val porTempo = item.tipoExecucao == "tempo"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Repetição",
+                                fontWeight = if (!porTempo) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (!porTempo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
                             )
-                        } else {
-                            OutlinedTextField(
-                                item.repeticoes,
-                                { exercicios = exercicios.toMutableList().also { list -> list[index] = item.copy(repeticoes = it) } },
-                                label = { Text("Reps") },
-                                modifier = Modifier.weight(1f)
+                            Switch(
+                                checked = porTempo,
+                                onCheckedChange = { checked ->
+                                    atualizarEx(setIndex, exIndex) {
+                                        it.copy(tipoExecucao = if (checked) "tempo" else "repeticao")
+                                    }
+                                }
+                            )
+                            Text(
+                                "Tempo",
+                                fontWeight = if (porTempo) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (porTempo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
                             )
                         }
-                    }
-                    if (porTempo) {
-                        OutlinedTextField(
-                            descansosDigitados[index]
-                                ?: item.descansoSegundos.takeIf { it > 0 }?.let { Time.formatMmSs(it) }.orEmpty(),
-                            { valor ->
-                                val sanitizado = Time.sanitizeMmSs(valor)
-                                descansosDigitados[index] = sanitizado
-                                exercicios = exercicios.toMutableList().also { list ->
-                                    list[index] = item.copy(descansoSegundos = Time.parseMmSs(sanitizado) ?: 0)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                item.series.toString(),
+                                { valor -> atualizarEx(setIndex, exIndex) { it.copy(series = valor.toIntOrNull() ?: 1) } },
+                                label = { Text("Séries") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (porTempo) {
+                                OutlinedTextField(
+                                    temposDigitados[chaveTempo]
+                                        ?: item.tempoExecucao?.let { Time.formatMmSs(it) }.orEmpty(),
+                                    { valor ->
+                                        val sanitizado = Time.sanitizeMmSs(valor)
+                                        temposDigitados[chaveTempo] = sanitizado
+                                        atualizarEx(setIndex, exIndex) { it.copy(tempoExecucao = Time.parseMmSs(sanitizado)) }
+                                    },
+                                    label = { Text("Tempo (mm:ss)") },
+                                    placeholder = { Text("00:45") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                OutlinedTextField(
+                                    item.repeticoes,
+                                    { valor -> atualizarEx(setIndex, exIndex) { it.copy(repeticoes = valor) } },
+                                    label = { Text("Reps") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        if (set.exercicios.size > 1) {
+                            TextButtonDelete("Remover exercício") {
+                                atualizarSet(setIndex) {
+                                    it.copy(exercicios = it.exercicios.filterIndexed { i, _ -> i != exIndex })
                                 }
-                            },
-                            label = { Text("Descanso (mm:ss, opcional)") },
-                            placeholder = { Text("01:00") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            }
+                        }
                     }
-                    TextButtonDelete { exercicios = exercicios.filterIndexed { i, _ -> i != index } }
+                    OutlinedButton(
+                        onClick = {
+                            atualizarSet(setIndex) { it.copy(exercicios = it.exercicios + WorkoutExercise()) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Adicionar exercício neste SET") }
+                    OutlinedTextField(
+                        descansosDigitados[setIndex] ?: Time.formatMmSs(set.descansoSegundos),
+                        { valor ->
+                            val sanitizado = Time.sanitizeMmSs(valor)
+                            descansosDigitados[setIndex] = sanitizado
+                            atualizarSet(setIndex) { it.copy(descansoSegundos = Time.parseMmSs(sanitizado) ?: 0) }
+                        },
+                        label = { Text("Descanso após o SET (mm:ss)") },
+                        placeholder = { Text("01:00") },
+                        supportingText = { Text("O descanso acontece só depois de concluir todos os exercícios deste SET.") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (sets.size > 1) {
+                        TextButtonDelete("Remover SET") {
+                            sets = sets.filterIndexed { i, _ -> i != setIndex }
+                        }
+                    }
                 }
             }
             OutlinedButton(
-                onClick = { exercicios = exercicios + WorkoutExercise() },
+                onClick = {
+                    sets = sets + WorkoutSet(
+                        id = Time.newId(),
+                        exercicios = listOf(WorkoutExercise()),
+                        descansoSegundos = 60
+                    )
+                },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Adicionar exercício") }
+            ) { Text("Adicionar SET") }
             if (existing != null && onVisualize != null) {
                 OutlinedButton(
                     onClick = { onVisualize(existing.id) },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Visualizar treino") }
+            }
+            if (existing != null && sets.any { set -> set.exercicios.any { it.nome.isNotBlank() } }) {
+                OutlinedButton(
+                    onClick = {
+                        val snapshot = existing.copy(
+                            titulo = titulo.trim(),
+                            clienteId = clienteId,
+                            clienteNome = alunoCadastro?.nome.orEmpty(),
+                            exerciciosJson = jsonDosSets()
+                        )
+                        if (WhatsAppShare.enviarTreino(context, snapshot, clientes, alunoCadastro?.id, alunoCadastro?.nome.orEmpty())) {
+                            confirmarEnvio = true
+                        } else {
+                            Toast.makeText(context, "Não foi possível abrir o compartilhamento.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Compartilhar arquivo") }
             }
             Button(
                 onClick = {
@@ -303,14 +455,14 @@ fun TreinoFormScreen(
                             clienteNome = cliente?.nome.orEmpty(),
                             tipo = tipo,
                             duracaoEstimada = duracao.toIntOrNull() ?: 60,
-                            exerciciosJson = JsonStore.encodeExercicios(exercicios),
+                            exerciciosJson = jsonDosSets(),
                             dataEnvio = existing?.dataEnvio ?: Time.today(),
                             createdDate = existing?.createdDate ?: now,
                             updatedDate = now
                         )
                     )
                 },
-                enabled = titulo.isNotBlank(),
+                enabled = titulo.isNotBlank() && sets.any { set -> set.exercicios.any { it.nome.isNotBlank() } },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Salvar no aparelho") }
         }
@@ -319,11 +471,25 @@ fun TreinoFormScreen(
     detalhe?.let { catalogo ->
         ExerciseInfoDialog(item = catalogo, onDismiss = { detalhe = null })
     }
+    if (confirmarEnvio && existing != null) {
+        AlertDialog(
+            onDismissRequest = { confirmarEnvio = false },
+            title = { Text("O arquivo foi compartilhado?") },
+            text = { Text("Só registramos o envio se você confirmar. Escolha o app no seletor do sistema.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRegistrarEnvio(existing.copy(dataEnvio = Time.nowIso(), updatedDate = Time.nowIso()))
+                    confirmarEnvio = false
+                }) { Text("Sim, registrar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmarEnvio = false }) { Text("Não") } }
+        )
+    }
 }
 
 @Composable
-private fun TextButtonDelete(onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick) { Text("Remover exercício") }
+private fun TextButtonDelete(label: String = "Remover exercício", onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick) { Text(label) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -334,6 +500,8 @@ fun AulaFormScreen(
     treinos: List<TreinoEntity>,
     onBack: () -> Unit,
     onVisualizeTreino: (String) -> Unit = {},
+    onPedirAPagar: (String, AulaAluno, Boolean) -> Unit = { _, _, _ -> },
+    onRegistrarEnvioTreino: (TreinoEntity) -> Unit = {},
     onSave: (AulaEntity) -> Unit
 ) {
     var data by rememberSaveable { mutableStateOf(existing?.data ?: Time.today()) }
@@ -344,9 +512,33 @@ fun AulaFormScreen(
     var local by rememberSaveable { mutableStateOf(existing?.local.orEmpty()) }
     var link by rememberSaveable { mutableStateOf(existing?.linkOnline.orEmpty()) }
     var observacoes by rememberSaveable { mutableStateOf(existing?.observacoes.orEmpty()) }
-    var alunos by remember { mutableStateOf(existing?.let { JsonStore.decodeAlunos(it.alunosJson) } ?: emptyList()) }
+    var alunos by remember(existing?.id) {
+        mutableStateOf(existing?.let { JsonStore.decodeAlunos(it.alunosJson) } ?: emptyList())
+    }
     var alunoSel by rememberSaveable { mutableStateOf("") }
     var treinoSel by rememberSaveable { mutableStateOf("") }
+    val aulaSalva = existing != null
+
+    LaunchedEffect(existing?.id, existing?.alunosJson) {
+        val gravados = existing?.let { JsonStore.decodeAlunos(it.alunosJson) }.orEmpty()
+        if (gravados.isEmpty()) return@LaunchedEffect
+        if (alunos.isEmpty()) {
+            alunos = gravados
+            return@LaunchedEffect
+        }
+        val mesclados = alunos.map { local ->
+            val gravado = gravados.find { it.clienteId == local.clienteId } ?: return@map local
+            local.copy(
+                clienteNome = local.clienteNome.ifBlank { gravado.clienteNome },
+                treinoId = local.treinoId ?: gravado.treinoId,
+                treinoTitulo = local.treinoTitulo ?: gravado.treinoTitulo,
+                checkInRealizado = gravado.checkInRealizado,
+                checkInHorario = gravado.checkInHorario,
+                valorAulaRegistrado = gravado.valorAulaRegistrado
+            )
+        }
+        alunos = mesclados + gravados.filter { g -> mesclados.none { it.clienteId == g.clienteId } }
+    }
 
     val ativos = clientes.filter { it.status == "ativo" }
     val treinosDoAlunoSel = treinos.filter { it.clienteId == alunoSel }
@@ -401,13 +593,24 @@ fun AulaFormScreen(
             }
             OutlinedButton(
                 onClick = {
-                    val cliente = ativos.find { it.id == alunoSel } ?: return@OutlinedButton
-                    if (alunos.none { it.clienteId == cliente.id }) {
-                        alunos = alunos + AulaAluno(
+                    val cliente = (ativos + clientes).find { it.id == alunoSel } ?: return@OutlinedButton
+                    val treino = treinos.find { it.id == treinoSel }
+                    alunos = if (alunos.none { it.clienteId == cliente.id }) {
+                        alunos + AulaAluno(
                             clienteId = cliente.id,
                             clienteNome = cliente.nome,
-                            treinoId = treinoSel.ifBlank { null }
+                            treinoId = treino?.id,
+                            treinoTitulo = treino?.titulo
                         )
+                    } else {
+                        alunos.map {
+                            if (it.clienteId != cliente.id) it
+                            else it.copy(
+                                clienteNome = cliente.nome,
+                                treinoId = treino?.id ?: it.treinoId,
+                                treinoTitulo = treino?.titulo ?: it.treinoTitulo
+                            )
+                        }
                     }
                     alunoSel = ""
                     treinoSel = ""
@@ -416,10 +619,28 @@ fun AulaFormScreen(
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Incluir aluno") }
             alunos.forEach { aluno ->
-                val treinosAluno = treinos.filter { it.clienteId == aluno.clienteId }
+                val treinosAluno = treinos.filter {
+                    it.clienteId == aluno.clienteId || it.id == aluno.treinoId
+                }
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text(aluno.clienteNome, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                        CheckInRow(
+                            nome = aluno.nomeExibicao(clientes).ifBlank { "Aluno" },
+                            checked = aluno.checkInRealizado,
+                            detalhe = listOfNotNull(
+                                aluno.treinoExibicao(treinos),
+                                when {
+                                    !aulaSalva -> "Salve a aula para marcar a pagar"
+                                    aluno.checkInRealizado -> "A pagar ${aluno.checkInHorario.orEmpty()}".trim()
+                                    else -> "Toque para lançar a dívida"
+                                }
+                            ).joinToString(" · "),
+                            enabled = aulaSalva,
+                            modifier = Modifier.weight(1f),
+                            onToggle = { realizar ->
+                                existing?.id?.let { onPedirAPagar(it, aluno, realizar) }
+                            }
+                        )
                         IconButton(onClick = { alunos = alunos.filter { it.clienteId != aluno.clienteId } }) {
                             Icon(Icons.Outlined.Delete, contentDescription = "Remover")
                         }
@@ -427,22 +648,64 @@ fun AulaFormScreen(
                     SimpleDropdown(
                         "Treino vinculado (opcional)",
                         aluno.treinoId.orEmpty(),
-                        listOf("" to "Nenhum") + treinosAluno.map { it.id to it.titulo }
+                        buildList {
+                            add("" to "Nenhum")
+                            addAll(treinosAluno.map { it.id to it.titulo })
+                            val atualId = aluno.treinoId
+                            if (!atualId.isNullOrBlank() && none { it.first == atualId }) {
+                                add(atualId to (aluno.treinoExibicao(treinos) ?: "Treino"))
+                            }
+                        }
                     ) { escolhido ->
+                        val treino = treinos.find { it.id == escolhido }
                         alunos = alunos.map {
-                            if (it.clienteId == aluno.clienteId) it.copy(treinoId = escolhido.ifBlank { null }) else it
+                            if (it.clienteId != aluno.clienteId) it
+                            else it.copy(
+                                treinoId = escolhido.ifBlank { null },
+                                treinoTitulo = treino?.titulo
+                            )
                         }
                     }
                     if (!aluno.treinoId.isNullOrBlank()) {
+                        val treinoVinculado = treinos.find { it.id == aluno.treinoId }
                         OutlinedButton(
                             onClick = { onVisualizeTreino(aluno.treinoId.orEmpty()) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Visualizar treino") }
+                        EnviarTreinoWhatsAppButton(
+                            treino = treinoVinculado,
+                            clientes = clientes,
+                            clienteIdPreferido = aluno.clienteId,
+                            clienteNomePreferido = aluno.nomeExibicao(clientes),
+                            modifier = Modifier.fillMaxWidth(),
+                            onRegistrarEnvio = onRegistrarEnvioTreino
+                        )
                     }
                 }
             }
             Button(
                 onClick = {
+                    var paraSalvar = alunos
+                    if (alunoSel.isNotBlank()) {
+                        val cliente = clientes.find { it.id == alunoSel }
+                        val treino = treinos.find { it.id == treinoSel }
+                        if (cliente != null && paraSalvar.none { it.clienteId == cliente.id }) {
+                            paraSalvar = paraSalvar + AulaAluno(
+                                clienteId = cliente.id,
+                                clienteNome = cliente.nome,
+                                treinoId = treino?.id,
+                                treinoTitulo = treino?.titulo
+                            )
+                        }
+                    }
+                    paraSalvar = paraSalvar.map { aluno ->
+                        val cliente = clientes.find { it.id == aluno.clienteId }
+                        val treino = treinos.find { it.id == aluno.treinoId }
+                        aluno.copy(
+                            clienteNome = aluno.clienteNome.ifBlank { cliente?.nome.orEmpty() },
+                            treinoTitulo = aluno.treinoTitulo?.takeIf { it.isNotBlank() } ?: treino?.titulo
+                        )
+                    }
                     val now = Time.nowIso()
                     onSave(
                         AulaEntity(
@@ -450,7 +713,7 @@ fun AulaFormScreen(
                             data = data.trim(),
                             horario = horario.trim(),
                             tipoAula = tipo,
-                            alunosJson = JsonStore.encodeAlunos(alunos),
+                            alunosJson = JsonStore.encodeAlunos(paraSalvar),
                             status = status,
                             duracaoMinutos = duracao.toIntOrNull() ?: 60,
                             local = local.trim(),

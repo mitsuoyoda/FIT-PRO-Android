@@ -170,6 +170,9 @@ interface TransacaoDao {
     @Query("DELETE FROM transacoes_financeiras WHERE clienteId = :clienteId")
     suspend fun deleteByCliente(clienteId: String)
 
+    @Query("SELECT * FROM transacoes_financeiras WHERE aulaId = :aulaId AND clienteId = :clienteId AND tipoTransacao = 'aula_realizada' LIMIT 1")
+    suspend fun findAulaRealizada(aulaId: String, clienteId: String): TransacaoEntity?
+
     @Query("DELETE FROM transacoes_financeiras")
     suspend fun deleteAll()
 }
@@ -177,11 +180,44 @@ interface TransacaoDao {
 @Dao
 interface ExercicioBibliotecaDao {
     @Query("SELECT * FROM exercicios_biblioteca ORDER BY nome ASC")
+    fun observeAll(): Flow<List<ExercicioBibliotecaEntity>>
+
+    @Query("SELECT * FROM exercicios_biblioteca ORDER BY nome ASC")
     suspend fun getAll(): List<ExercicioBibliotecaEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ExercicioBibliotecaEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<ExercicioBibliotecaEntity>)
 
+    @Query("DELETE FROM exercicios_biblioteca WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("DELETE FROM exercicios_biblioteca")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface PlanoAssessoriaDao {
+    @Query("SELECT * FROM planos_assessoria ORDER BY updatedDate DESC")
+    fun observeAll(): Flow<List<PlanoAssessoriaEntity>>
+
+    @Query("SELECT * FROM planos_assessoria ORDER BY updatedDate DESC")
+    suspend fun getAll(): List<PlanoAssessoriaEntity>
+
+    @Query("SELECT * FROM planos_assessoria WHERE id = :id")
+    suspend fun getById(id: String): PlanoAssessoriaEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: PlanoAssessoriaEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<PlanoAssessoriaEntity>)
+
+    @Query("DELETE FROM planos_assessoria WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM planos_assessoria")
     suspend fun deleteAll()
 }

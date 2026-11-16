@@ -1,6 +1,7 @@
 package com.fittrainer.pro.data.catalog
 
 import android.content.Context
+import com.fittrainer.pro.data.local.ExercicioBibliotecaEntity
 import com.fittrainer.pro.data.local.JsonStore
 import kotlinx.serialization.Serializable
 import java.text.Normalizer
@@ -59,6 +60,64 @@ object ExerciseCatalog {
         val needle = name.normalized()
         if (needle.isBlank()) return null
         val all = items(context)
+        return all.firstOrNull { it.displayName.normalized() == needle }
+            ?: all.firstOrNull { it.nomeEn.normalized() == needle }
+    }
+
+    fun fromBiblioteca(entity: ExercicioBibliotecaEntity): ExerciseCatalogItem = ExerciseCatalogItem(
+        id = entity.id,
+        nomePt = entity.nome,
+        grupo = entity.grupoMuscular,
+        secundarios = entity.descricao,
+        video = entity.video,
+        videoAlt = entity.videoAlt,
+        calorias = entity.calorias,
+        fonte = "biblioteca",
+        ordem = 0
+    )
+
+    fun merged(context: Context, biblioteca: List<ExercicioBibliotecaEntity>): List<ExerciseCatalogItem> {
+        val extras = biblioteca.associateBy { it.id }
+        val catalogo = items(context).map { item ->
+            extras[item.id]?.let { fromBiblioteca(it) } ?: item
+        }
+        val idsCatalogo = catalogo.map { it.id }.toSet()
+        val soBiblioteca = biblioteca
+            .filter { it.id !in idsCatalogo }
+            .map { fromBiblioteca(it) }
+        return (soBiblioteca + catalogo).sortedWith(compareBy({ it.fonte != "biblioteca" }, { it.displayName.lowercase() }))
+    }
+
+    fun searchMerged(
+        context: Context,
+        biblioteca: List<ExercicioBibliotecaEntity>,
+        query: String,
+        limit: Int = 8
+    ): List<ExerciseCatalogItem> {
+        val needle = query.normalized()
+        if (needle.length < 2) return emptyList()
+        return merged(context, biblioteca).asSequence()
+            .filter { item ->
+                item.nomePt.normalized().contains(needle) ||
+                    item.nomeEn.normalized().contains(needle) ||
+                    item.grupo.normalized().contains(needle)
+            }
+            .take(limit)
+            .toList()
+    }
+
+    fun findMerged(
+        context: Context,
+        biblioteca: List<ExercicioBibliotecaEntity>,
+        catalogId: String?,
+        name: String
+    ): ExerciseCatalogItem? {
+        val all = merged(context, biblioteca)
+        if (!catalogId.isNullOrBlank()) {
+            all.firstOrNull { it.id == catalogId }?.let { return it }
+        }
+        val needle = name.normalized()
+        if (needle.isBlank()) return null
         return all.firstOrNull { it.displayName.normalized() == needle }
             ?: all.firstOrNull { it.nomeEn.normalized() == needle }
     }

@@ -1,6 +1,7 @@
 package com.fittrainer.pro.data.repository
 
 import androidx.room.withTransaction
+import com.fittrainer.pro.data.checkin.CheckInLogic
 import com.fittrainer.pro.data.local.AppDatabase
 import com.fittrainer.pro.data.local.AulaAluno
 import com.fittrainer.pro.data.local.AulaEntity
@@ -9,6 +10,7 @@ import com.fittrainer.pro.data.local.ClienteEntity
 import com.fittrainer.pro.data.local.ExercicioBibliotecaEntity
 import com.fittrainer.pro.data.local.HistoricoTreinoEntity
 import com.fittrainer.pro.data.local.JsonStore
+import com.fittrainer.pro.data.local.PlanoAssessoriaEntity
 import com.fittrainer.pro.data.local.ProgressoEntity
 import com.fittrainer.pro.data.local.TransacaoEntity
 import com.fittrainer.pro.data.local.TreinoEntity
@@ -28,7 +30,8 @@ data class BackupPayload(
     val progresso: List<ProgressoEntity> = emptyList(),
     val historicoTreinos: List<HistoricoTreinoEntity> = emptyList(),
     val transacoes: List<TransacaoEntity> = emptyList(),
-    val exerciciosBiblioteca: List<ExercicioBibliotecaEntity> = emptyList()
+    val exerciciosBiblioteca: List<ExercicioBibliotecaEntity> = emptyList(),
+    val planosAssessoria: List<PlanoAssessoriaEntity> = emptyList()
 )
 
 class FitTrainerRepository(private val db: AppDatabase) {
@@ -39,6 +42,8 @@ class FitTrainerRepository(private val db: AppDatabase) {
     val progresso: Flow<List<ProgressoEntity>> = db.progressoDao().observeAll()
     val transacoes: Flow<List<TransacaoEntity>> = db.transacaoDao().observeAll()
     val historico: Flow<List<HistoricoTreinoEntity>> = db.historicoDao().observeAll()
+    val exerciciosBiblioteca: Flow<List<ExercicioBibliotecaEntity>> = db.exercicioBibliotecaDao().observeAll()
+    val planosAssessoria: Flow<List<PlanoAssessoriaEntity>> = db.planoAssessoriaDao().observeAll()
 
     suspend fun cliente(id: String) = db.clienteDao().getById(id)
     suspend fun treino(id: String) = db.treinoDao().getById(id)
@@ -51,6 +56,8 @@ class FitTrainerRepository(private val db: AppDatabase) {
     suspend fun saveProgresso(entity: ProgressoEntity) = db.progressoDao().upsert(entity)
     suspend fun saveTransacao(entity: TransacaoEntity) = db.transacaoDao().upsert(entity)
     suspend fun saveHistorico(entity: HistoricoTreinoEntity) = db.historicoDao().upsert(entity)
+    suspend fun saveExercicioBiblioteca(entity: ExercicioBibliotecaEntity) = db.exercicioBibliotecaDao().upsert(entity)
+    suspend fun savePlanoAssessoria(entity: PlanoAssessoriaEntity) = db.planoAssessoriaDao().upsert(entity)
 
     suspend fun deleteCliente(id: String) {
         db.treinoDao().deleteByCliente(id)
@@ -66,33 +73,45 @@ class FitTrainerRepository(private val db: AppDatabase) {
     suspend fun deleteAvaliacao(id: String) = db.avaliacaoDao().deleteById(id)
     suspend fun deleteProgresso(id: String) = db.progressoDao().deleteById(id)
     suspend fun deleteTransacao(id: String) = db.transacaoDao().deleteById(id)
+    suspend fun deleteExercicioBiblioteca(id: String) = db.exercicioBibliotecaDao().deleteById(id)
+    suspend fun deletePlanoAssessoria(id: String) = db.planoAssessoriaDao().deleteById(id)
+
+    suspend fun vincularTreinoAoPlano(planoId: String, semana: Int, diaSemana: Int, treinoId: String) {
+        val plano = db.planoAssessoriaDao().getById(planoId) ?: return
+        val semanas = JsonStore.decodeSemanas(plano.semanasJson).map { bloco ->
+            if (bloco.numero != semana) bloco
+            else bloco.copy(
+                dias = bloco.dias.map { dia ->
+                    if (dia.diaSemana == diaSemana) dia.copy(treinoId = treinoId) else dia
+                }
+            )
+        }
+        db.planoAssessoriaDao().upsert(
+            plano.copy(semanasJson = JsonStore.encodeSemanas(semanas), updatedDate = Time.nowIso())
+        )
+    }
 
     suspend fun checkIn(aula: AulaEntity, aluno: AulaAluno, valorAula: Double?) {
-        val horario = java.time.LocalTime.now().toString().take(5)
-        val alunos = JsonStore.decodeAlunos(aula.alunosJson).map {
-            if (it.clienteId == aluno.clienteId) {
-                it.copy(
-                    checkInRealizado = true,
-                    checkInHorario = horario,
-                    valorAulaRegistrado = valorAula
-                )
-            } else it
-        }
-        saveAula(aula.copy(alunosJson = JsonStore.encodeAlunos(alunos), updatedDate = Time.nowIso()))
-        saveTransacao(
-            TransacaoEntity(
-                id = Time.newId(),
-                clienteId = aluno.clienteId,
-                clienteNome = aluno.clienteNome,
-                tipoTransacao = "aula_realizada",
-                dataTransacao = "${aula.data}T${aula.horario}",
-                valor = valorAula ?: 0.0,
-                referencia = "Aula realizada - ${Time.formatDate(aula.data)} às ${aula.horario}",
-                aulaId = aula.id,
-                createdDate = Time.nowIso(),
-                updatedDate = Time.nowIso()
-            )
-        )
+        setCheckIn(aula.id, aluno, true, valorAula)
+    }
+
+    suspend fun setCheckIn(aulaId: String, aluno: AulaAluno, realizado: Boolean, valorAula: Double?): Boolean {
+        val aula = db.aulaDao().getById(aulaId) ?: return false
+        val aplicacao = CheckInLogic.aplicar(
+            aula = aula,
+            aluno = aluno,
+            realizado = realizado,
+            valorAula = valorAula,
+            horario = if (realizado) java.time.LocalTime.now().toString().take(5) else null,
+            agoraIso = Time.nowIso(),
+            transacaoExistente = db.transacaoDao().findAulaRealizada(aula.id, aluno.clienteId),
+            novoId = Time.newId(),
+            dataFormatada = Time.formatDate(aula.data)
+        ) ?: return false
+        saveAula(aplicacao.aula)
+        aplicacao.transacaoUpsert?.let { saveTransacao(it) }
+        aplicacao.transacaoDeleteId?.let { db.transacaoDao().deleteById(it) }
+        return true
     }
 
     suspend fun exportBackup(): BackupPayload = BackupPayload(
@@ -104,7 +123,8 @@ class FitTrainerRepository(private val db: AppDatabase) {
         progresso = db.progressoDao().getAll(),
         historicoTreinos = db.historicoDao().getAll(),
         transacoes = db.transacaoDao().getAll(),
-        exerciciosBiblioteca = db.exercicioBibliotecaDao().getAll()
+        exerciciosBiblioteca = db.exercicioBibliotecaDao().getAll(),
+        planosAssessoria = db.planoAssessoriaDao().getAll()
     )
 
     suspend fun importBackup(payload: BackupPayload, replace: Boolean) {
@@ -123,6 +143,7 @@ class FitTrainerRepository(private val db: AppDatabase) {
                 db.aulaDao().deleteAll()
                 db.treinoDao().deleteAll()
                 db.exercicioBibliotecaDao().deleteAll()
+                db.planoAssessoriaDao().deleteAll()
                 db.clienteDao().deleteAll()
             }
             db.clienteDao().upsertAll(payload.clientes)
@@ -133,6 +154,7 @@ class FitTrainerRepository(private val db: AppDatabase) {
             db.historicoDao().upsertAll(payload.historicoTreinos)
             db.transacaoDao().upsertAll(payload.transacoes)
             db.exercicioBibliotecaDao().upsertAll(payload.exerciciosBiblioteca)
+            db.planoAssessoriaDao().upsertAll(payload.planosAssessoria)
         }
     }
 }

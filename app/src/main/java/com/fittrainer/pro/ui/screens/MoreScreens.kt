@@ -43,15 +43,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fittrainer.pro.data.backup.BackupManager
-import com.fittrainer.pro.data.local.AvaliacaoEntity
 import com.fittrainer.pro.data.local.ClienteEntity
-import com.fittrainer.pro.data.local.ProgressoEntity
 import com.fittrainer.pro.data.local.TransacaoEntity
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Schedule
 import com.fittrainer.pro.ui.components.EmptyState
 import com.fittrainer.pro.ui.components.InfoCard
+import com.fittrainer.pro.ui.components.PageHeader
 import com.fittrainer.pro.ui.components.SimpleDropdown
+import com.fittrainer.pro.ui.components.StatTile
+import com.fittrainer.pro.ui.theme.FitColors
 import com.fittrainer.pro.util.Time
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,184 +96,6 @@ private fun MenuRow(title: String, subtitle: String, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AvaliacoesScreen(
-    avaliacoes: List<AvaliacaoEntity>,
-    onBack: () -> Unit,
-    onAdd: () -> Unit,
-    onOpen: (AvaliacaoEntity) -> Unit,
-    onDelete: (String) -> Unit
-) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            FloatingActionButton(onClick = onAdd, containerColor = MaterialTheme.colorScheme.primary) {
-                Icon(Icons.Outlined.Add, contentDescription = "Nova avaliação")
-            }
-        }
-    ) { padding ->
-        if (avaliacoes.isEmpty()) {
-            EmptyState("Nenhuma avaliação salva neste aparelho.", Modifier.padding(padding))
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(avaliacoes, key = { it.id }) { item ->
-                    InfoCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(item.clienteNome, fontWeight = FontWeight.SemiBold)
-                                Text("${Time.formatDate(item.dataAvaliacao)} · ${item.peso ?: "-"} kg")
-                            }
-                            IconButton(onClick = { onDelete(item.id) }) {
-                                Icon(Icons.Outlined.Delete, contentDescription = "Excluir")
-                            }
-                        }
-                        OutlinedButton(onClick = { onOpen(item) }) { Text("Editar") }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AvaliacaoFormScreen(
-    existing: AvaliacaoEntity?,
-    clientes: List<ClienteEntity>,
-    onBack: () -> Unit,
-    onSave: (AvaliacaoEntity) -> Unit
-) {
-    var clienteId by rememberSaveable { mutableStateOf(existing?.clienteId.orEmpty()) }
-    var data by rememberSaveable { mutableStateOf(existing?.dataAvaliacao ?: Time.today()) }
-    var peso by rememberSaveable { mutableStateOf(existing?.peso?.toString().orEmpty()) }
-    var altura by rememberSaveable { mutableStateOf(existing?.altura?.toString().orEmpty()) }
-    var idade by rememberSaveable { mutableStateOf(existing?.idade?.toString().orEmpty()) }
-    var gordura by rememberSaveable { mutableStateOf(existing?.percentualGordura?.toString().orEmpty()) }
-    var observacoes by rememberSaveable { mutableStateOf(existing?.observacoes.orEmpty()) }
-    val ativos = clientes.filter { it.status == "ativo" }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (existing == null) "Nova avaliação" else "Editar avaliação") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Voltar") }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SimpleDropdown("Aluno", clienteId, listOf("" to "Selecione") + ativos.map { it.id to it.nome }) { clienteId = it }
-            OutlinedTextField(data, { data = it }, label = { Text("Data (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(peso, { peso = it }, label = { Text("Peso (kg) *") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(altura, { altura = it }, label = { Text("Altura (cm)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(idade, { idade = it }, label = { Text("Idade") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(gordura, { gordura = it }, label = { Text("% gordura") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(observacoes, { observacoes = it }, label = { Text("Observações") }, modifier = Modifier.fillMaxWidth())
-            Button(
-                onClick = {
-                    val cliente = clientes.find { it.id == clienteId }
-                    val now = Time.nowIso()
-                    onSave(
-                        AvaliacaoEntity(
-                            id = existing?.id ?: Time.newId(),
-                            clienteId = clienteId,
-                            clienteNome = cliente?.nome.orEmpty(),
-                            dataAvaliacao = data,
-                            sexo = if (cliente?.sexo == "feminino") "F" else "M",
-                            idade = idade.toIntOrNull(),
-                            peso = peso.replace(",", ".").toDoubleOrNull(),
-                            altura = altura.replace(",", ".").toDoubleOrNull(),
-                            percentualGordura = gordura.replace(",", ".").toDoubleOrNull(),
-                            observacoes = observacoes.trim(),
-                            createdDate = existing?.createdDate ?: now,
-                            updatedDate = now
-                        )
-                    )
-                },
-                enabled = clienteId.isNotBlank() && peso.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Salvar no aparelho") }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProgressoScreen(
-    clientes: List<ClienteEntity>,
-    progresso: List<ProgressoEntity>,
-    onBack: () -> Unit,
-    onSave: (ProgressoEntity) -> Unit,
-    onDelete: (String) -> Unit
-) {
-    var clienteId by rememberSaveable { mutableStateOf("") }
-    var data by rememberSaveable { mutableStateOf(Time.today()) }
-    var peso by rememberSaveable { mutableStateOf("") }
-    var gordura by rememberSaveable { mutableStateOf("") }
-    var observacoes by rememberSaveable { mutableStateOf("") }
-    val ativos = clientes.filter { it.status == "ativo" }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            item {
-                SimpleDropdown("Aluno", clienteId, listOf("" to "Selecione") + ativos.map { it.id to it.nome }) { clienteId = it }
-                OutlinedTextField(data, { data = it }, label = { Text("Data (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                OutlinedTextField(peso, { peso = it }, label = { Text("Peso (kg)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                OutlinedTextField(gordura, { gordura = it }, label = { Text("% gordura") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                OutlinedTextField(observacoes, { observacoes = it }, label = { Text("Observações") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                Button(
-                    onClick = {
-                        onSave(
-                            ProgressoEntity(
-                                id = Time.newId(),
-                                clienteId = clienteId,
-                                dataRegistro = data,
-                                peso = peso.replace(",", ".").toDoubleOrNull(),
-                                percentualGordura = gordura.replace(",", ".").toDoubleOrNull(),
-                                observacoes = observacoes.trim(),
-                                createdDate = Time.nowIso(),
-                                updatedDate = Time.nowIso()
-                            )
-                        )
-                        peso = ""; gordura = ""; observacoes = ""
-                    },
-                    enabled = clienteId.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) { Text("Registrar progresso") }
-            }
-            items(progresso, key = { it.id }) { item ->
-                val nome = clientes.find { it.id == item.clienteId }?.nome ?: "Aluno"
-                InfoCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(nome, fontWeight = FontWeight.SemiBold)
-                            Text("${Time.formatDate(item.dataRegistro)} · ${item.peso ?: "-"} kg")
-                        }
-                        IconButton(onClick = { onDelete(item.id) }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Excluir")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun FinanceiroScreen(
     clientes: List<ClienteEntity>,
     transacoes: List<TransacaoEntity>,
@@ -287,17 +111,24 @@ fun FinanceiroScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = FitColors.Canvas
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                InfoCard {
-                    Text("A receber: R$ ${"%.2f".format(Locale("pt", "BR"), receber)}")
-                    Text("Recebido: R$ ${"%.2f".format(Locale("pt", "BR"), recebido)}")
-                    Text("Saldo: R$ ${"%.2f".format(Locale("pt", "BR"), receber - recebido)}", fontWeight = FontWeight.Bold)
+                PageHeader(
+                    eyebrow = "Caixa",
+                    title = "Financeiro",
+                    subtitle = "Receitas recebidas, aulas a pagar e lançamentos do espaço."
+                )
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatTile("A receber", Time.money(receber), Icons.Outlined.Schedule)
+                    StatTile("Recebido", Time.money(recebido), Icons.Outlined.AttachMoney)
+                    StatTile("Saldo", Time.money(receber - recebido), Icons.Outlined.AttachMoney)
                 }
             }
             item {
@@ -333,7 +164,14 @@ fun FinanceiroScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(item.clienteNome.ifBlank { "Transação" }, fontWeight = FontWeight.SemiBold)
-                            Text("${item.tipoTransacao} · R$ ${"%.2f".format(Locale("pt", "BR"), item.valor)}")
+                            Text(
+                                when (item.tipoTransacao) {
+                                    "aula_realizada" -> "A pagar"
+                                    "pagamento" -> "Pagamento"
+                                    else -> item.tipoTransacao
+                                } + if (item.referencia.isNotBlank()) " · ${item.referencia}" else ""
+                            )
+                            Text(Time.money(item.valor), fontWeight = FontWeight.SemiBold, color = FitColors.Ink)
                         }
                         IconButton(onClick = { onDelete(item.id) }) {
                             Icon(Icons.Outlined.Delete, contentDescription = "Excluir")
@@ -349,19 +187,24 @@ fun FinanceiroScreen(
 @Composable
 fun BackupScreen(
     backupManager: BackupManager,
+    cloudBackupStatus: String,
+    onSyncCloudBackup: () -> Unit,
     onBack: () -> Unit,
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var pendingImportReplace by remember { mutableStateOf<Boolean?>(null) }
     var confirmReplace by remember { mutableStateOf(false) }
-
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    var senha by rememberSaveable { mutableStateOf("") }
+    val mimeExport = if (senha.isNotBlank()) "application/octet-stream" else "application/json"
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(mimeExport)) { uri ->
         if (uri != null) {
+            val senhaChars = senha.toCharArray()
             scope.launch {
-                runCatching { backupManager.exportTo(uri) }
-                    .onSuccess { onMessage("Backup exportado") }
+                runCatching { backupManager.exportTo(uri, senhaChars) }
+                    .onSuccess { onMessage(if (senha.isNotBlank()) "Backup cifrado exportado" else "Backup exportado") }
                     .onFailure { onMessage(it.message ?: "Falha ao exportar") }
+                senhaChars.fill('\u0000')
             }
         }
     }
@@ -370,25 +213,56 @@ fun BackupScreen(
         val replace = pendingImportReplace
         pendingImportReplace = null
         if (uri != null && replace != null) {
+            val senhaChars = senha.toCharArray()
             scope.launch {
-                runCatching { backupManager.importFrom(uri, replace) }
+                runCatching { backupManager.importFrom(uri, replace, senhaChars) }
                     .onSuccess { onMessage(if (replace) "Banco substituído pelo backup" else "Backup mesclado") }
                     .onFailure { onMessage(it.message ?: "Falha ao importar") }
+                senhaChars.fill('\u0000')
             }
         }
     }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = FitColors.Canvas
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Todos os dados ficam no SQLite deste aparelho. Exporte com frequência e guarde o arquivo em um local seguro.")
+            PageHeader(
+                eyebrow = "Espaço",
+                title = "Configurações",
+                subtitle = "O app guarda os dados localmente e sincroniza uma cópia incremental na conta Firebase do treinador."
+            )
+            InfoCard {
+                Text("Backup na nuvem", fontWeight = FontWeight.SemiBold, color = FitColors.Ink)
+                Text(cloudBackupStatus, color = FitColors.Muted, modifier = Modifier.padding(top = 5.dp))
+                OutlinedButton(onClick = onSyncCloudBackup, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text("Sincronizar e recuperar agora")
+                }
+                Text(
+                    "No primeiro acesso, os registros são mesclados pela data de atualização. Exclusões locais permanecem na cópia de recuperação.",
+                    color = FitColors.Muted,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            OutlinedTextField(
+                value = senha,
+                onValueChange = { senha = it },
+                label = { Text("Senha do backup (opcional)") },
+                modifier = Modifier.fillMaxWidth()
+            )
             Button(
-                onClick = { exportLauncher.launch("fittrainer-backup-${Time.today()}.json") },
+                onClick = {
+                    val nome = if (senha.isNotBlank()) {
+                        "fittrainer-backup-${Time.today()}.fitpro"
+                    } else {
+                        "fittrainer-backup-${Time.today()}.json"
+                    }
+                    exportLauncher.launch(nome)
+                },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Exportar banco") }
             OutlinedButton(

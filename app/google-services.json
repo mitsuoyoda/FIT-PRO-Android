@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "768774767073",
+    "project_id": "fittreinerpro",
+    "storage_bucket": "fittreinerpro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:768774767073:android:b3b863050c803bcefd52a0",
+        "android_client_info": {
+          "package_name": "com.fittrainer.pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlVq4fNgEjI1Kdx8PQ2VacL9TQAM9XnTE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:768774767073:android:063db40ce7d62f3dfd52a0",
+        "android_client_info": {
+          "package_name": "com.fittreiner.cliente"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlVq4fNgEjI1Kdx8PQ2VacL9TQAM9XnTE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

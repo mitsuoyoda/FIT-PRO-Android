@@ -126,6 +126,27 @@ data class ExercicioBibliotecaEntity(
     val nome: String,
     val grupoMuscular: String = "",
     val descricao: String = "",
+    val video: String = "",
+    val videoAlt: String = "",
+    val calorias: String = "",
+    val createdDate: String,
+    val updatedDate: String
+)
+
+@Entity(tableName = "planos_assessoria")
+@Serializable
+data class PlanoAssessoriaEntity(
+    @PrimaryKey val id: String,
+    val nome: String,
+    val clienteId: String = "",
+    val clienteNome: String = "",
+    val duracaoSemanas: Int = 4,
+    val semanasJson: String = "[]",
+    val copiadoDeId: String? = null,
+    val status: String = "modelo",
+    val ultimoCompartilhamento: String = "",
+    val statusCompartilhamento: String = "",
+    val semanasCompartilhadasJson: String = "[]",
     val createdDate: String,
     val updatedDate: String
 )

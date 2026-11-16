@@ -10,19 +10,26 @@ class BackupManager(
     private val context: Context,
     private val repository: FitTrainerRepository
 ) {
-    suspend fun exportTo(uri: Uri) {
+    suspend fun exportTo(uri: Uri, password: CharArray = CharArray(0)) {
         val payload = repository.exportBackup()
-        val body = JsonStore.json.encodeToString(BackupPayload.serializer(), payload)
+        val plain = JsonStore.json.encodeToString(BackupPayload.serializer(), payload).toByteArray(Charsets.UTF_8)
+        val body = if (password.isNotEmpty()) BackupCrypto.encrypt(plain, password) else plain
         context.contentResolver.openOutputStream(uri)?.use { stream ->
-            stream.write(body.toByteArray(Charsets.UTF_8))
+            stream.write(body)
         } ?: error("Não foi possível gravar o arquivo")
     }
 
-    suspend fun importFrom(uri: Uri, replace: Boolean) {
-        val text = context.contentResolver.openInputStream(uri)?.use { stream ->
-            stream.readBytes().toString(Charsets.UTF_8)
+    suspend fun importFrom(uri: Uri, replace: Boolean, password: CharArray = CharArray(0)) {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { stream ->
+            stream.readBytes()
         } ?: error("Não foi possível ler o arquivo")
-        val payload = JsonStore.json.decodeFromString(BackupPayload.serializer(), text)
+        if (bytes.size > BackupCrypto.MAX_BYTES) error("Arquivo de backup grande demais")
+        val json = if (BackupCrypto.isEncrypted(bytes)) {
+            BackupCrypto.decrypt(bytes, password).toString(Charsets.UTF_8)
+        } else {
+            bytes.toString(Charsets.UTF_8)
+        }
+        val payload = JsonStore.json.decodeFromString(BackupPayload.serializer(), json)
         repository.importBackup(payload, replace)
     }
 }

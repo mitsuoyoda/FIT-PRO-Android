@@ -1,7 +1,11 @@
 package com.fittrainer.pro.util
 
+import java.text.NumberFormat
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
@@ -15,6 +19,37 @@ object Time {
 
     fun nowIso(): String = LocalDateTime.now().format(isoDateTime)
 
+    fun nowIsoOffset(): String = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+    fun toIsoOffset(raw: String): String {
+        val texto = raw.trim()
+        if (texto.isEmpty()) return nowIsoOffset()
+        runCatching { return OffsetDateTime.parse(texto).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) }
+        runCatching {
+            val local = LocalDateTime.parse(texto.take(19), isoDateTime)
+            return local.atZone(ZoneId.systemDefault()).toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        }
+        toIsoDate(texto)?.let { data ->
+            return LocalDate.parse(data).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime()
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        }
+        return nowIsoOffset()
+    }
+
+    fun toIsoDate(raw: String): String? {
+        val texto = raw.trim()
+        if (texto.isEmpty()) return null
+        if (texto.length >= 10 && texto[4] == '-' && texto[7] == '-') {
+            return runCatching { LocalDate.parse(texto.take(10)).format(dateFmt) }.getOrNull()
+        }
+        return runCatching { LocalDate.parse(texto, displayDate).format(dateFmt) }.getOrNull()
+    }
+
+    fun mondayOf(isoDate: String = today()): LocalDate {
+        val data = runCatching { LocalDate.parse(toIsoDate(isoDate) ?: today()) }.getOrDefault(LocalDate.now())
+        return data.with(DayOfWeek.MONDAY)
+    }
+
     fun today(): String = LocalDate.now().format(dateFmt)
 
     fun newId(): String = UUID.randomUUID().toString()
@@ -22,6 +57,16 @@ object Time {
     fun formatDate(isoDate: String): String = runCatching {
         LocalDate.parse(isoDate.take(10)).format(displayDate)
     }.getOrDefault(isoDate)
+
+    fun formatDateTime(raw: String): String {
+        val texto = raw.trim()
+        if (texto.isEmpty()) return ""
+        runCatching {
+            val dt = LocalDateTime.parse(texto.take(19), isoDateTime)
+            return dt.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", localePt))
+        }
+        return formatDate(texto)
+    }
 
     fun formatMmSs(totalSeconds: Int): String {
         val safe = totalSeconds.coerceAtLeast(0)
@@ -57,6 +102,8 @@ object Time {
     }
 
     fun longToday(): String = LocalDate.now().format(longDate).replaceFirstChar { it.uppercase() }
+
+    fun money(value: Double): String = NumberFormat.getCurrencyInstance(localePt).format(value)
 
     fun greeting(): String {
         val hora = LocalDateTime.now().hour

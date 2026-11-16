@@ -1,7 +1,6 @@
 package com.fittrainer.pro.ui.components
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fittrainer.pro.data.catalog.ExerciseCatalog
 import com.fittrainer.pro.data.catalog.ExerciseCatalogItem
+import com.fittrainer.pro.data.local.ExercicioBibliotecaEntity
+import com.fittrainer.pro.util.SafeUrl
 
 @Composable
 fun ExerciseNameField(
@@ -40,13 +41,16 @@ fun ExerciseNameField(
     onValueChange: (String) -> Unit,
     onPick: (ExerciseCatalogItem) -> Unit,
     onShowInfo: () -> Unit,
-    hasInfo: Boolean
+    hasInfo: Boolean,
+    biblioteca: List<ExercicioBibliotecaEntity> = emptyList()
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
     var escolhido by remember { mutableStateOf(false) }
-    val suggestions = remember(value) { ExerciseCatalog.search(context, value) }
+    val suggestions = remember(value, biblioteca) {
+        ExerciseCatalog.searchMerged(context, biblioteca, value)
+    }
     val mostrarLista = focused && !escolhido && suggestions.isNotEmpty()
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -135,19 +139,26 @@ fun ExerciseInfoDialog(
                 } else {
                     Text("Vídeos", fontWeight = FontWeight.SemiBold)
                     item.videos.forEach { (label, url) ->
+                        val safe = SafeUrl.httpOrHttps(url)
                         Text(
                             text = label,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (safe != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    runCatching { context.startActivity(intent) }
-                                }
+                                .then(
+                                    if (safe != null) Modifier.clickable {
+                                        val intent = Intent(Intent.ACTION_VIEW, safe)
+                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        runCatching { context.startActivity(intent) }
+                                    } else Modifier
+                                )
                                 .padding(vertical = 4.dp)
                         )
-                        Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            if (safe != null) url else "URL ignorada (somente http/https)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
             }
